@@ -1,0 +1,6 @@
+/cmake-build-*
+/.idea
+/.vs
+/CMakeSettings.json
+/venv/
+*.png

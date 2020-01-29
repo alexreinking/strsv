@@ -1,0 +1,10 @@
+{
+  "name": "strsv",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "benchmark",
+    "eigen3",
+    "gtest",
+    "openblas"
+  ]
+}

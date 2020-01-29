@@ -1,0 +1,73 @@
+name: Test
+on: push
+jobs:
+  benchmark:
+    runs-on: ubuntu-20.04
+    env:
+      VCPKG_ROOT: '${{ github.workspace }}/vcpkg'
+      VCPKG_REF: 9986c28da97f316fe3c79be0538af8f46a200796
+      MKLROOT: '${{ github.workspace }}/intel/mkl'
+      MKL_ENABLE_INSTRUCTIONS: AVX2
+      OPENBLAS_NUM_THREADS: 1
+    steps:
+      - name: Check out strsv code
+        uses: actions/checkout@v2
+
+      - name: Check out vcpkg
+        uses: actions/checkout@v2
+        with:
+          repository: microsoft/vcpkg
+          path: ${{ env.VCPKG_ROOT }}
+          ref: ${{ env.VCPKG_REF }}
+
+      - name: Install latest CMake
+        uses: lukka/get-cmake@latest
+
+      - uses: actions/setup-python@v2
+      - name: Install Python requirements
+        run: |
+          python -m pip install -U pip wheel
+          python -m pip install -r requirements.txt
+
+      - name: Restore cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            /home/runner/.cache/vcpkg
+            ${{ env.MKLROOT }}
+            ${{ env.VCPKG_ROOT }}/vcpkg
+            ${{ env.VCPKG_ROOT }}/downloads
+          key: ${{ hashFiles('vcpkg.json', 'overlay/**') }}-${{ env.VCPKG_REF }}-v3
+
+      - name: Install MKL
+        run: |
+          [ -d "${{ env.MKLROOT }}" ] && exit
+          wget https://registrationcenter-download.intel.com/akdlm/irc_nas/17402/l_onemkl_p_2021.1.1.52.sh
+          chmod +x ./l_onemkl_p_2021.1.1.52.sh
+          ./l_onemkl_p_2021.1.1.52.sh -a -s --eula=accept --install-dir "${{ env.MKLROOT }}/.."
+
+      - name: Configure
+        run: >-
+          cmake -G Ninja -S . -B build
+          '-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake'
+          '-DMKL_ROOT=${{ github.workspace }}/intel/mkl/latest'
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_FLAGS=-march=skylake
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: cd build && ctest
+
+      ## Plotting
+      - name: Generate plots
+        run: python make_plots.py build/tests/performance/*.csv
+
+      ## Upload performance results
+      - uses: actions/upload-artifact@v2
+        with:
+          name: benchmark-results
+          path: |
+            build/tests/performance/*.csv
+            *.png
